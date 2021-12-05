@@ -64,11 +64,7 @@ class MainActivity : AppCompatActivity() {
 
     private fun takePhoto() {
         // Get a stable reference of the modifiable image capture use case
-        Log.i("Camera", "TRIED TO TAKE PHOTO")
-        Log.i("Camera", imageCapture.toString())
-        val imageCapture = imageCapture ?: return
-        Log.i("Camera", "TRIED TO TAKE PHOTO")
-        Log.i("Camera", imageCapture.toString())
+        val imageCapture = imageCapture ?: return // Elvis operator
 
         // Create time-stamped output file to hold the image
         val photoFile = File(
@@ -110,6 +106,14 @@ class MainActivity : AppCompatActivity() {
                     it.setSurfaceProvider(viewFinder.surfaceProvider)
                 }
 
+            imageCapture = ImageCapture.Builder().build()
+
+            val imageAnalyzer = ImageAnalysis.Builder().build().also {
+                it.setAnalyzer(cameraExecutor, LuminosityAnalyzer { luma ->  
+                    Log.d(TAG, "Average luminosity = $luma")
+                })
+            }
+
             // Select back camera as a default
             val cameraSelector = CameraSelector.DEFAULT_BACK_CAMERA
 
@@ -119,7 +123,7 @@ class MainActivity : AppCompatActivity() {
 
                 // Bind use cases to camera
                 cameraProvider.bindToLifecycle(
-                    this, cameraSelector, preview)
+                    this, cameraSelector, preview, imageCapture)
 
             } catch(exc: Exception) {
                 Log.e(TAG, "Use case binding failed", exc)
@@ -145,6 +149,25 @@ class MainActivity : AppCompatActivity() {
         cameraExecutor.shutdown()
     }
 
+    private class LuminosityAnalyzer(private val listener: LumaListener): ImageAnalysis.Analyzer {
+        private fun ByteBuffer.toByteArray(): ByteArray {
+            rewind()
+            val data = ByteArray(remaining())
+            get(data)
+            return data
+        }
+
+        override fun analyze(image: ImageProxy) {
+            val buffer = image.planes[0].buffer
+            val data = buffer.toByteArray()
+            val pixels = data.map {
+                it.toInt() and 0xFF
+            }
+            val luma = pixels.average()
+            listener(luma)
+            image.close()
+        }
+    }
 
     companion object {
         private const val TAG = "CameraXBasic"
