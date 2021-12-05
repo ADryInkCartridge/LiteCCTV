@@ -1,39 +1,69 @@
 package com.example.litecctv
 
-import androidx.appcompat.app.AppCompatActivity
-import android.os.Bundle
 import android.Manifest
+import android.annotation.SuppressLint
 import android.content.pm.PackageManager
 import android.graphics.Bitmap
 import android.graphics.BitmapFactory
+import android.os.Bundle
+import android.util.Base64
 import android.util.Log
 import android.widget.Toast
-import androidx.core.app.ActivityCompat
-import androidx.core.content.ContextCompat
-import java.util.concurrent.Executors
+import androidx.appcompat.app.AppCompatActivity
 import androidx.camera.core.*
 import androidx.camera.lifecycle.ProcessCameraProvider
+import androidx.core.app.ActivityCompat
+import androidx.core.content.ContextCompat
 import com.example.litecctv.machine.MotionDetector
 import kotlinx.android.synthetic.main.activity_main.*
+import java.io.ByteArrayOutputStream
 import java.io.File
 import java.nio.ByteBuffer
 import java.text.SimpleDateFormat
 import java.util.*
 import java.util.concurrent.ExecutorService
+import java.util.concurrent.Executors
+import android.app.ProgressDialog
+import com.android.volley.DefaultRetryPolicy
+import com.android.volley.Request
+import com.android.volley.RequestQueue
+import com.android.volley.Response
+import com.android.volley.toolbox.JsonObjectRequest
+import com.android.volley.toolbox.StringRequest
+import com.android.volley.toolbox.Volley
+import com.example.litecctv.machine.DBHelper
+import com.example.litecctv.machine.MySingleton
+import org.json.JSONObject
+import java.security.SecureRandom
+import java.security.Timestamp
+
+
 typealias LumaListener = (luma: Double) -> Unit
 
 class MainActivity : AppCompatActivity() {
+    val URL_IMAGE_POST = "http://192.168.5.121:8000/image/"
+    val URL_TOKEN_POST = "http://192.168.5.121:8000/tokenCheck/"
+    val STRING_LENGTH = 6
     private var imageCapture: ImageCapture? = null
-
+    val db = DBHelper(this, null)
     private lateinit var outputDirectory: File
     private lateinit var cameraExecutor: ExecutorService
-
+    var token = ""
     private var motionDetector: MotionDetector? = null
 
+    @SuppressLint("Range")
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         setContentView(R.layout.activity_main)
-
+        val db = DBHelper(this, null)
+        val cursor = db.getToken()
+        cursor!!.moveToFirst()
+        if(cursor.getCount() != 0 ){
+            token = cursor.getString(cursor.getColumnIndex(DBHelper.TOKEN_COL))
+            Log.e("Sending", token )
+        }
+        else
+            generateToken()
         // Request camera permissions
         if (allPermissionsGranted()) {
             startCamera()
@@ -44,7 +74,7 @@ class MainActivity : AppCompatActivity() {
 
         // Set up the listener for take photo button
         camera_capture_button.setOnClickListener { takePhoto() }
-
+        Toast.makeText(this, token, Toast.LENGTH_SHORT).show()
         outputDirectory = getOutputDirectory()
 
         cameraExecutor = Executors.newSingleThreadExecutor()
@@ -93,12 +123,30 @@ class MainActivity : AppCompatActivity() {
                 imageProxy.close()
                 if (motionDetector.hasMotion(bitmap)) {
                     Toast.makeText(baseContext, "Capture OK - MOTION DETECTED", Toast.LENGTH_LONG).show()
+                    val base64String = getBase64OfPhoto(bitmap)
+                    val timestamp = SimpleDateFormat(FILENAME_FORMAT, Locale.US).format(System.currentTimeMillis())
+                    sendImageToCloud(timestamp, base64String, token);
                 }
                 else {
                     Toast.makeText(baseContext, "Capture OK - NO MOTION DETECTED", Toast.LENGTH_LONG).show()
                 }
             }
         });
+    }
+    private fun generateToken() {
+        val queue = Volley.newRequestQueue(this)
+        val stringRequest = StringRequest(Request.Method.GET, URL_TOKEN_POST,
+            Response.Listener<String> { response ->
+                // Display the first 500 characters of the response string.
+                Log.e("AAA", "generateToken: $response", )
+                db.addToken(response)
+                db.addToken(response)
+                token = response
+                Toast.makeText(this, token, Toast.LENGTH_SHORT).show()
+            },
+            Response.ErrorListener { Log.e("AAA", "generateToken:", ) })
+
+        queue.add(stringRequest)
     }
 
     private fun imageProxyToBitmap(image: ImageProxy): Bitmap {
@@ -169,6 +217,59 @@ class MainActivity : AppCompatActivity() {
         cameraExecutor.shutdown()
     }
 
+    private fun getBase64OfPhoto(image: Bitmap): String? {
+        val baos = ByteArrayOutputStream()
+        image.compress(Bitmap.CompressFormat.PNG, 100, baos)
+        val byteArray: ByteArray = baos.toByteArray()
+        return Base64.encodeToString(byteArray, Base64.DEFAULT)
+    }
+
+    private fun sendImageToCloud(fileName: String, imageData: String?, token: String) {
+//        val progressDialog = ProgressDialog.show(this@MainActivity, "", "Uploading...", true)
+        val queue = MySingleton.getInstance(this.applicationContext).requestQueue
+        val map = mutableMapOf<String, Any?>()
+        map["filename"] = fileName
+        map["imagedata"] = imageData
+        map["token"] = token
+
+        val json = JSONObject(map)
+        Log.e("sendImageToCloud", json.toString() )
+        val jsonReq = object: JsonObjectRequest(Request.Method.POST,URL_IMAGE_POST,json,
+        Response.Listener { response ->
+            try {
+
+                Toast.makeText(this,
+                    "Response: $response",
+                    Toast.LENGTH_SHORT).show()
+            }catch (e:Exception){
+                Toast.makeText(this,
+                    "Exception: $e",
+                    Toast.LENGTH_SHORT).show()
+            }
+
+        }, Response.ErrorListener{
+            // Error in request
+                Toast.makeText(this,
+                    "Volley error: $it",
+                    Toast.LENGTH_SHORT).show()
+        })
+        {
+            override fun getHeaders(): MutableMap<String, String> {
+                val headers = HashMap<String, String>()
+                headers["Content-Type"] = "application/json; charset=utf-8"
+                return headers
+            }
+        }
+
+//        Log.e("Sending", "sendImageToCloud: " )
+
+        jsonReq.retryPolicy = DefaultRetryPolicy(
+            0,
+            DefaultRetryPolicy.DEFAULT_MAX_RETRIES,
+            DefaultRetryPolicy.DEFAULT_BACKOFF_MULT
+        )
+        MySingleton.getInstance(this).addToRequestQueue(jsonReq)
+    }
     private class LuminosityAnalyzer(private val listener: LumaListener): ImageAnalysis.Analyzer {
         private fun ByteBuffer.toByteArray(): ByteArray {
             rewind()
@@ -188,6 +289,8 @@ class MainActivity : AppCompatActivity() {
             image.close()
         }
     }
+
+
 
     companion object {
         private const val TAG = "CameraXBasic"
