@@ -41,8 +41,8 @@ import java.security.Timestamp
 typealias LumaListener = (luma: Double) -> Unit
 
 class MainActivity : AppCompatActivity() {
-    val URL_IMAGE_POST = "http://192.168.5.121:8000/image/"
-    val URL_TOKEN_POST = "http://192.168.5.121:8000/tokenCheck/"
+    val URL_IMAGE_POST = "http://128.199.123.139:8080/image/"
+    val URL_TOKEN_POST = "http://128.199.123.139:8080/tokenCheck/"
     val STRING_LENGTH = 6
     private var imageCapture: ImageCapture? = null
     val db = DBHelper(this, null)
