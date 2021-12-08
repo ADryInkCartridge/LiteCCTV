@@ -73,7 +73,9 @@ class MainActivity : AppCompatActivity() {
 
         // Set up the listener for take photo button
         camera_capture_button.setOnClickListener { takePhoto() }
-        Toast.makeText(this, token, Toast.LENGTH_SHORT).show()
+        // Show token string on the screen
+        token_text_view.setText(token)
+
         outputDirectory = getOutputDirectory()
 
         cameraExecutor = Executors.newSingleThreadExecutor()
