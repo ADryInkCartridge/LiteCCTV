@@ -266,17 +266,7 @@ class MainActivity : AppCompatActivity() {
         Log.e("sendImageToCloud", json.toString() )
         val jsonReq = object: JsonObjectRequest(Request.Method.POST,URL_IMAGE_POST,json,
         Response.Listener { response ->
-            try {
-
-                Toast.makeText(this,
-                    "Response: $response",
-                    Toast.LENGTH_SHORT).show()
-            }catch (e:Exception){
-                Toast.makeText(this,
-                    "Exception: $e",
-                    Toast.LENGTH_SHORT).show()
-            }
-
+            Log.i(TAG, "Response from server: $response")
         }, Response.ErrorListener{
             // Error in request
                 Toast.makeText(this,
