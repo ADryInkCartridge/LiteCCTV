@@ -5,6 +5,8 @@ import android.annotation.SuppressLint
 import android.content.pm.PackageManager
 import android.graphics.Bitmap
 import android.graphics.BitmapFactory
+import android.media.RingtoneManager
+import android.net.Uri
 import android.os.Bundle
 import android.os.Handler
 import android.os.Looper
@@ -85,6 +87,16 @@ class MainActivity : AppCompatActivity() {
         cameraExecutor = Executors.newSingleThreadExecutor()
     }
 
+    fun playSound() {
+        try {
+            val notification: Uri = RingtoneManager.getDefaultUri(RingtoneManager.TYPE_NOTIFICATION)
+            val r = RingtoneManager.getRingtone(applicationContext, notification)
+            r.play()
+        } catch (e: java.lang.Exception) {
+            e.printStackTrace()
+        }
+    }
+
     fun switchOnOffCCTV() {
         if (cctvStatus) {
             cctvStatus = false
@@ -140,6 +152,9 @@ class MainActivity : AppCompatActivity() {
                 if (motionDetector.hasMotion(bitmap)) {
                     Toast.makeText(baseContext, "Capture OK - MOTION DETECTED - Sending Picture To Server Now", Toast.LENGTH_LONG).show()
                     thread() {
+                        // Play sound
+                        playSound()
+
                         // Resize bitmap
                         bitmap = Bitmap.createScaledBitmap(bitmap, IMAGE_CAPTURE_WIDTH, IMAGE_CAPTURE_HEIGHT, false)
 
@@ -159,13 +174,13 @@ class MainActivity : AppCompatActivity() {
         val stringRequest = StringRequest(Request.Method.GET, URL_TOKEN_POST,
             Response.Listener<String> { response ->
                 // Display the first 500 characters of the response string.
-                Log.e("AAA", "generateToken: $response", )
+                Log.e("AAA", "generateToken: $response")
                 db.addToken(response)
                 db.addToken(response)
                 token = response
                 Toast.makeText(this, token, Toast.LENGTH_SHORT).show()
             },
-            Response.ErrorListener { Log.e("AAA", "generateToken:", ) })
+            Response.ErrorListener { Log.e("AAA", "generateToken:") })
 
         queue.add(stringRequest)
     }
