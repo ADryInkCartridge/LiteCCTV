@@ -5,7 +5,11 @@ import android.annotation.SuppressLint
 import android.content.pm.PackageManager
 import android.graphics.Bitmap
 import android.graphics.BitmapFactory
+import android.media.RingtoneManager
+import android.net.Uri
 import android.os.Bundle
+import android.os.Handler
+import android.os.Looper
 import android.util.Base64
 import android.util.Log
 import android.widget.Toast
@@ -14,8 +18,17 @@ import androidx.camera.core.*
 import androidx.camera.lifecycle.ProcessCameraProvider
 import androidx.core.app.ActivityCompat
 import androidx.core.content.ContextCompat
+import com.android.volley.DefaultRetryPolicy
+import com.android.volley.Request
+import com.android.volley.Response
+import com.android.volley.toolbox.JsonObjectRequest
+import com.android.volley.toolbox.StringRequest
+import com.android.volley.toolbox.Volley
+import com.example.litecctv.machine.DBHelper
 import com.example.litecctv.machine.MotionDetector
+import com.example.litecctv.machine.MySingleton
 import kotlinx.android.synthetic.main.activity_main.*
+import org.json.JSONObject
 import java.io.ByteArrayOutputStream
 import java.io.File
 import java.nio.ByteBuffer
@@ -23,24 +36,14 @@ import java.text.SimpleDateFormat
 import java.util.*
 import java.util.concurrent.ExecutorService
 import java.util.concurrent.Executors
-import android.app.ProgressDialog
-import com.android.volley.DefaultRetryPolicy
-import com.android.volley.Request
-import com.android.volley.RequestQueue
-import com.android.volley.Response
-import com.android.volley.toolbox.JsonObjectRequest
-import com.android.volley.toolbox.StringRequest
-import com.android.volley.toolbox.Volley
-import com.example.litecctv.machine.DBHelper
-import com.example.litecctv.machine.MySingleton
-import org.json.JSONObject
-import java.security.SecureRandom
-import java.security.Timestamp
+import kotlin.concurrent.thread
 
 
 typealias LumaListener = (luma: Double) -> Unit
 
 class MainActivity : AppCompatActivity() {
+    val IMAGE_CAPTURE_WIDTH = 300
+    val IMAGE_CAPTURE_HEIGHT = 300
     val URL_IMAGE_POST = "http://128.199.123.139:8080/image/"
     val URL_TOKEN_POST = "http://128.199.123.139:8080/tokenCheck/"
     val STRING_LENGTH = 6
@@ -50,6 +53,8 @@ class MainActivity : AppCompatActivity() {
     private lateinit var cameraExecutor: ExecutorService
     var token = ""
     private var motionDetector: MotionDetector? = null
+    private var cctvStatus = false
+    private lateinit var cameraHandler: Handler
 
     @SuppressLint("Range")
     override fun onCreate(savedInstanceState: Bundle?) {
@@ -73,11 +78,34 @@ class MainActivity : AppCompatActivity() {
         }
 
         // Set up the listener for take photo button
-        camera_capture_button.setOnClickListener { takePhoto() }
-        Toast.makeText(this, token, Toast.LENGTH_SHORT).show()
+        camera_capture_button.setOnClickListener { switchOnOffCCTV() }
+        // Show token string on the screen
+        token_text_view.setText(token)
+
         outputDirectory = getOutputDirectory()
 
         cameraExecutor = Executors.newSingleThreadExecutor()
+    }
+
+    fun playSound() {
+        try {
+            val notification: Uri = RingtoneManager.getDefaultUri(RingtoneManager.TYPE_NOTIFICATION)
+            val r = RingtoneManager.getRingtone(applicationContext, notification)
+            r.play()
+        } catch (e: java.lang.Exception) {
+            e.printStackTrace()
+        }
+    }
+
+    fun switchOnOffCCTV() {
+        if (cctvStatus) {
+            cctvStatus = false
+            camera_capture_button.setText("Start")
+        }
+        else {
+            cctvStatus = true
+            camera_capture_button.setText("Stop")
+        }
     }
 
     override fun onRequestPermissionsResult(
@@ -119,32 +147,40 @@ class MainActivity : AppCompatActivity() {
 
             override fun onCaptureSuccess(imageProxy: ImageProxy) {
                 super.onCaptureSuccess(imageProxy)
-                val bitmap: Bitmap = imageProxyToBitmap(imageProxy)
+                var bitmap: Bitmap = imageProxyToBitmap(imageProxy)
                 imageProxy.close()
                 if (motionDetector.hasMotion(bitmap)) {
-                    Toast.makeText(baseContext, "Capture OK - MOTION DETECTED", Toast.LENGTH_LONG).show()
-                    val base64String = getBase64OfPhoto(bitmap)
-                    val timestamp = SimpleDateFormat(FILENAME_FORMAT, Locale.US).format(System.currentTimeMillis())
-                    sendImageToCloud(timestamp, base64String, token);
+                    Toast.makeText(baseContext, "Capture OK - MOTION DETECTED - Sending Picture To Server Now", Toast.LENGTH_LONG).show()
+                    thread() {
+                        // Play sound
+                        playSound()
+
+                        // Resize bitmap
+                        bitmap = Bitmap.createScaledBitmap(bitmap, IMAGE_CAPTURE_WIDTH, IMAGE_CAPTURE_HEIGHT, false)
+
+                        val base64String = getBase64OfPhoto(bitmap)
+                        val timestamp = SimpleDateFormat(FILENAME_FORMAT, Locale.US).format(System.currentTimeMillis())
+                        sendImageToCloud(timestamp, base64String, token)
+                    }
                 }
                 else {
-                    Toast.makeText(baseContext, "Capture OK - NO MOTION DETECTED", Toast.LENGTH_LONG).show()
+//                    Toast.makeText(baseContext, "Capture OK - NO MOTION DETECTED", Toast.LENGTH_LONG).show()
                 }
             }
-        });
+        })
     }
     private fun generateToken() {
         val queue = Volley.newRequestQueue(this)
         val stringRequest = StringRequest(Request.Method.GET, URL_TOKEN_POST,
             Response.Listener<String> { response ->
                 // Display the first 500 characters of the response string.
-                Log.e("AAA", "generateToken: $response", )
+                Log.e("AAA", "generateToken: $response")
                 db.addToken(response)
                 db.addToken(response)
                 token = response
                 Toast.makeText(this, token, Toast.LENGTH_SHORT).show()
             },
-            Response.ErrorListener { Log.e("AAA", "generateToken:", ) })
+            Response.ErrorListener { Log.e("AAA", "generateToken:") })
 
         queue.add(stringRequest)
     }
@@ -196,6 +232,17 @@ class MainActivity : AppCompatActivity() {
             // Instantiate motion detector
             motionDetector = MotionDetector()
 
+            thread() {
+                cameraHandler = Handler(Looper.getMainLooper())
+                cameraHandler.post(object: Runnable {
+                    override fun run() {
+                        if (cctvStatus) {
+                            takePhoto()
+                        }
+                        cameraHandler.postDelayed(this, 900)
+                    }
+                })
+            }
 
         }, ContextCompat.getMainExecutor(this))
     }
@@ -229,24 +276,14 @@ class MainActivity : AppCompatActivity() {
         val queue = MySingleton.getInstance(this.applicationContext).requestQueue
         val map = mutableMapOf<String, Any?>()
         map["filename"] = fileName
-        map["imagedata"] = imageData
         map["token"] = token
+        map["imagedata"] = imageData
 
         val json = JSONObject(map)
         Log.e("sendImageToCloud", json.toString() )
         val jsonReq = object: JsonObjectRequest(Request.Method.POST,URL_IMAGE_POST,json,
         Response.Listener { response ->
-            try {
-
-                Toast.makeText(this,
-                    "Response: $response",
-                    Toast.LENGTH_SHORT).show()
-            }catch (e:Exception){
-                Toast.makeText(this,
-                    "Exception: $e",
-                    Toast.LENGTH_SHORT).show()
-            }
-
+            Log.i(TAG, "Response from server: $response")
         }, Response.ErrorListener{
             // Error in request
                 Toast.makeText(this,
