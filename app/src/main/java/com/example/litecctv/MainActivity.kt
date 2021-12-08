@@ -6,6 +6,8 @@ import android.content.pm.PackageManager
 import android.graphics.Bitmap
 import android.graphics.BitmapFactory
 import android.os.Bundle
+import android.os.Handler
+import android.os.Looper
 import android.util.Base64
 import android.util.Log
 import android.widget.Toast
@@ -49,6 +51,8 @@ class MainActivity : AppCompatActivity() {
     private lateinit var cameraExecutor: ExecutorService
     var token = ""
     private var motionDetector: MotionDetector? = null
+    private var cctvStatus = false
+    private lateinit var cameraHandler: Handler
 
     @SuppressLint("Range")
     override fun onCreate(savedInstanceState: Bundle?) {
@@ -72,13 +76,24 @@ class MainActivity : AppCompatActivity() {
         }
 
         // Set up the listener for take photo button
-        camera_capture_button.setOnClickListener { takePhoto() }
+        camera_capture_button.setOnClickListener { switchOnOffCCTV() }
         // Show token string on the screen
         token_text_view.setText(token)
 
         outputDirectory = getOutputDirectory()
 
         cameraExecutor = Executors.newSingleThreadExecutor()
+    }
+
+    fun switchOnOffCCTV() {
+        if (cctvStatus) {
+            cctvStatus = false
+            camera_capture_button.setText("Start")
+        }
+        else {
+            cctvStatus = true
+            camera_capture_button.setText("Stop")
+        }
     }
 
     override fun onRequestPermissionsResult(
@@ -202,6 +217,15 @@ class MainActivity : AppCompatActivity() {
             // Instantiate motion detector
             motionDetector = MotionDetector()
 
+            cameraHandler = Handler(Looper.getMainLooper())
+            cameraHandler.post(object: Runnable {
+                override fun run() {
+                    if (cctvStatus) {
+                        takePhoto()
+                    }
+                    cameraHandler.postDelayed(this, 2000)
+                }
+            })
 
         }, ContextCompat.getMainExecutor(this))
     }
