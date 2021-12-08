@@ -14,8 +14,17 @@ import androidx.camera.core.*
 import androidx.camera.lifecycle.ProcessCameraProvider
 import androidx.core.app.ActivityCompat
 import androidx.core.content.ContextCompat
+import com.android.volley.DefaultRetryPolicy
+import com.android.volley.Request
+import com.android.volley.Response
+import com.android.volley.toolbox.JsonObjectRequest
+import com.android.volley.toolbox.StringRequest
+import com.android.volley.toolbox.Volley
+import com.example.litecctv.machine.DBHelper
 import com.example.litecctv.machine.MotionDetector
+import com.example.litecctv.machine.MySingleton
 import kotlinx.android.synthetic.main.activity_main.*
+import org.json.JSONObject
 import java.io.ByteArrayOutputStream
 import java.io.File
 import java.nio.ByteBuffer
@@ -23,19 +32,6 @@ import java.text.SimpleDateFormat
 import java.util.*
 import java.util.concurrent.ExecutorService
 import java.util.concurrent.Executors
-import android.app.ProgressDialog
-import com.android.volley.DefaultRetryPolicy
-import com.android.volley.Request
-import com.android.volley.RequestQueue
-import com.android.volley.Response
-import com.android.volley.toolbox.JsonObjectRequest
-import com.android.volley.toolbox.StringRequest
-import com.android.volley.toolbox.Volley
-import com.example.litecctv.machine.DBHelper
-import com.example.litecctv.machine.MySingleton
-import org.json.JSONObject
-import java.security.SecureRandom
-import java.security.Timestamp
 
 
 typealias LumaListener = (luma: Double) -> Unit
@@ -229,8 +225,8 @@ class MainActivity : AppCompatActivity() {
         val queue = MySingleton.getInstance(this.applicationContext).requestQueue
         val map = mutableMapOf<String, Any?>()
         map["filename"] = fileName
-        map["imagedata"] = imageData
         map["token"] = token
+        map["imagedata"] = imageData
 
         val json = JSONObject(map)
         Log.e("sendImageToCloud", json.toString() )
