@@ -232,15 +232,17 @@ class MainActivity : AppCompatActivity() {
             // Instantiate motion detector
             motionDetector = MotionDetector()
 
-            cameraHandler = Handler(Looper.getMainLooper())
-            cameraHandler.post(object: Runnable {
-                override fun run() {
-                    if (cctvStatus) {
-                        takePhoto()
+            thread() {
+                cameraHandler = Handler(Looper.getMainLooper())
+                cameraHandler.post(object: Runnable {
+                    override fun run() {
+                        if (cctvStatus) {
+                            takePhoto()
+                        }
+                        cameraHandler.postDelayed(this, 900)
                     }
-                    cameraHandler.postDelayed(this, 2000)
-                }
-            })
+                })
+            }
 
         }, ContextCompat.getMainExecutor(this))
     }
