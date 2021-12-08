@@ -32,11 +32,14 @@ import java.text.SimpleDateFormat
 import java.util.*
 import java.util.concurrent.ExecutorService
 import java.util.concurrent.Executors
+import kotlin.concurrent.thread
 
 
 typealias LumaListener = (luma: Double) -> Unit
 
 class MainActivity : AppCompatActivity() {
+    val IMAGE_CAPTURE_WIDTH = 300
+    val IMAGE_CAPTURE_HEIGHT = 300
     val URL_IMAGE_POST = "http://128.199.123.139:8080/image/"
     val URL_TOKEN_POST = "http://128.199.123.139:8080/tokenCheck/"
     val STRING_LENGTH = 6
@@ -115,19 +118,24 @@ class MainActivity : AppCompatActivity() {
 
             override fun onCaptureSuccess(imageProxy: ImageProxy) {
                 super.onCaptureSuccess(imageProxy)
-                val bitmap: Bitmap = imageProxyToBitmap(imageProxy)
+                var bitmap: Bitmap = imageProxyToBitmap(imageProxy)
                 imageProxy.close()
                 if (motionDetector.hasMotion(bitmap)) {
-                    Toast.makeText(baseContext, "Capture OK - MOTION DETECTED", Toast.LENGTH_LONG).show()
-                    val base64String = getBase64OfPhoto(bitmap)
-                    val timestamp = SimpleDateFormat(FILENAME_FORMAT, Locale.US).format(System.currentTimeMillis())
-                    sendImageToCloud(timestamp, base64String, token);
+                    Toast.makeText(baseContext, "Capture OK - MOTION DETECTED - Sending Picture To Server Now", Toast.LENGTH_LONG).show()
+                    thread() {
+                        // Resize bitmap
+                        bitmap = Bitmap.createScaledBitmap(bitmap, IMAGE_CAPTURE_WIDTH, IMAGE_CAPTURE_HEIGHT, false)
+
+                        val base64String = getBase64OfPhoto(bitmap)
+                        val timestamp = SimpleDateFormat(FILENAME_FORMAT, Locale.US).format(System.currentTimeMillis())
+                        sendImageToCloud(timestamp, base64String, token)
+                    }
                 }
                 else {
                     Toast.makeText(baseContext, "Capture OK - NO MOTION DETECTED", Toast.LENGTH_LONG).show()
                 }
             }
-        });
+        })
     }
     private fun generateToken() {
         val queue = Volley.newRequestQueue(this)
