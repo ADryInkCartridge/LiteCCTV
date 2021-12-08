@@ -149,7 +149,7 @@ class MainActivity : AppCompatActivity() {
                     }
                 }
                 else {
-                    Toast.makeText(baseContext, "Capture OK - NO MOTION DETECTED", Toast.LENGTH_LONG).show()
+//                    Toast.makeText(baseContext, "Capture OK - NO MOTION DETECTED", Toast.LENGTH_LONG).show()
                 }
             }
         })
