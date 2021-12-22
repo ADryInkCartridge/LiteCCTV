@@ -42,19 +42,15 @@ import kotlin.concurrent.thread
 typealias LumaListener = (luma: Double) -> Unit
 
 class MainActivity : AppCompatActivity() {
-    val IMAGE_CAPTURE_WIDTH = 300
-    val IMAGE_CAPTURE_HEIGHT = 300
-    val URL_IMAGE_POST = "http://128.199.123.139:8080/image/"
-    val URL_TOKEN_POST = "http://128.199.123.139:8080/tokenCheck/"
-    val STRING_LENGTH = 6
     private var imageCapture: ImageCapture? = null
-    val db = DBHelper(this, null)
+    private val db = DBHelper(this, null)
     private lateinit var outputDirectory: File
     private lateinit var cameraExecutor: ExecutorService
     var token = ""
-    private var motionDetector: MotionDetector? = null
+    private val motionDetector: MotionDetector = MotionDetector()
     private var cctvStatus = false
     private lateinit var cameraHandler: Handler
+    private var lensFacing: CameraSelector = CameraSelector.DEFAULT_BACK_CAMERA
 
     @SuppressLint("Range")
     override fun onCreate(savedInstanceState: Bundle?) {
@@ -63,7 +59,7 @@ class MainActivity : AppCompatActivity() {
         val db = DBHelper(this, null)
         val cursor = db.getToken()
         cursor!!.moveToFirst()
-        if(cursor.getCount() != 0 ){
+        if(cursor.count != 0 ){
             token = cursor.getString(cursor.getColumnIndex(DBHelper.TOKEN_COL))
             Log.e("Sending", token )
         }
@@ -80,11 +76,27 @@ class MainActivity : AppCompatActivity() {
         // Set up the listener for take photo button
         camera_capture_button.setOnClickListener { switchOnOffCCTV() }
         // Show token string on the screen
-        token_text_view.setText(token)
+        token_text_view.text = token
 
         outputDirectory = getOutputDirectory()
 
         cameraExecutor = Executors.newSingleThreadExecutor()
+
+        // Camera switching button
+        switch_camera_button.setOnClickListener { switchCamera() }
+
+        // Start capture timer (capture every 900ms)
+        thread {
+            cameraHandler = Handler(Looper.getMainLooper())
+            cameraHandler.post(object: Runnable {
+                override fun run() {
+                    if (cctvStatus) {
+                        takePhoto()
+                    }
+                    cameraHandler.postDelayed(this, 900)
+                }
+            })
+        }
     }
 
     fun playSound() {
@@ -97,14 +109,24 @@ class MainActivity : AppCompatActivity() {
         }
     }
 
-    fun switchOnOffCCTV() {
+    private fun switchCamera() {
+        Toast.makeText(this, "Switch camera now", Toast.LENGTH_LONG).show()
+        if (lensFacing == CameraSelector.DEFAULT_BACK_CAMERA)
+            lensFacing = CameraSelector.DEFAULT_FRONT_CAMERA
+        else if (lensFacing == CameraSelector.DEFAULT_FRONT_CAMERA)
+            lensFacing = CameraSelector.DEFAULT_BACK_CAMERA
+        startCamera()
+    }
+
+    @SuppressLint("SetTextI18n")
+    private fun switchOnOffCCTV() {
         if (cctvStatus) {
             cctvStatus = false
-            camera_capture_button.setText("Start")
+            camera_capture_button.text = "Start"
         }
         else {
             cctvStatus = true
-            camera_capture_button.setText("Stop")
+            camera_capture_button.text = "Stop"
         }
     }
 
@@ -127,7 +149,6 @@ class MainActivity : AppCompatActivity() {
     private fun takePhoto() {
         // Get a stable reference of the modifiable image capture use case
         val imageCapture = imageCapture ?: return // Elvis operator
-        val motionDetector = motionDetector ?: return
 
         // Create time-stamped output file to hold the image
         val photoFile = File(
@@ -136,14 +157,11 @@ class MainActivity : AppCompatActivity() {
             ).format(System.currentTimeMillis()) + ".jpg")
 
         // Create output options object which contains file + metadata
-        val outputOptions = ImageCapture.OutputFileOptions.Builder(photoFile).build()
+        ImageCapture.OutputFileOptions.Builder(photoFile).build()
 
         // Set up image capture listener, which is triggered after photo has
         // been taken
         imageCapture.takePicture(ContextCompat.getMainExecutor(this), object : ImageCapture.OnImageCapturedCallback() {
-            override fun onError(exception: ImageCaptureException) {
-                super.onError(exception)
-            }
 
             override fun onCaptureSuccess(imageProxy: ImageProxy) {
                 super.onCaptureSuccess(imageProxy)
@@ -151,7 +169,7 @@ class MainActivity : AppCompatActivity() {
                 imageProxy.close()
                 if (motionDetector.hasMotion(bitmap)) {
                     Toast.makeText(baseContext, "Capture OK - MOTION DETECTED - Sending Picture To Server Now", Toast.LENGTH_LONG).show()
-                    thread() {
+                    thread {
                         // Play sound
                         playSound()
 
@@ -163,16 +181,13 @@ class MainActivity : AppCompatActivity() {
                         sendImageToCloud(timestamp, base64String, token)
                     }
                 }
-                else {
-//                    Toast.makeText(baseContext, "Capture OK - NO MOTION DETECTED", Toast.LENGTH_LONG).show()
-                }
             }
         })
     }
     private fun generateToken() {
         val queue = Volley.newRequestQueue(this)
         val stringRequest = StringRequest(Request.Method.GET, URL_TOKEN_POST,
-            Response.Listener<String> { response ->
+            { response ->
                 // Display the first 500 characters of the response string.
                 Log.e("AAA", "generateToken: $response")
                 db.addToken(response)
@@ -180,7 +195,7 @@ class MainActivity : AppCompatActivity() {
                 token = response
                 Toast.makeText(this, token, Toast.LENGTH_SHORT).show()
             },
-            Response.ErrorListener { Log.e("AAA", "generateToken:") })
+            { Log.e("AAA", "generateToken:") })
 
         queue.add(stringRequest)
     }
@@ -195,7 +210,7 @@ class MainActivity : AppCompatActivity() {
     private fun startCamera() {
         val cameraProviderFuture = ProcessCameraProvider.getInstance(this)
 
-        cameraProviderFuture.addListener(Runnable {
+        cameraProviderFuture.addListener({
             // Used to bind the lifecycle of cameras to the lifecycle owner
             val cameraProvider: ProcessCameraProvider = cameraProviderFuture.get()
 
@@ -208,14 +223,11 @@ class MainActivity : AppCompatActivity() {
 
             imageCapture = ImageCapture.Builder().build()
 
-            val imageAnalyzer = ImageAnalysis.Builder().build().also {
+            ImageAnalysis.Builder().build().also {
                 it.setAnalyzer(cameraExecutor, LuminosityAnalyzer { luma ->  
                     Log.d(TAG, "Average luminosity = $luma")
                 })
             }
-
-            // Select back camera as a default
-            val cameraSelector = CameraSelector.DEFAULT_BACK_CAMERA
 
             try {
                 // Unbind use cases before rebinding
@@ -223,27 +235,11 @@ class MainActivity : AppCompatActivity() {
 
                 // Bind use cases to camera
                 cameraProvider.bindToLifecycle(
-                    this, cameraSelector, preview, imageCapture)
+                    this, lensFacing, preview, imageCapture)
 
             } catch(exc: Exception) {
                 Log.e(TAG, "Use case binding failed", exc)
             }
-
-            // Instantiate motion detector
-            motionDetector = MotionDetector()
-
-            thread() {
-                cameraHandler = Handler(Looper.getMainLooper())
-                cameraHandler.post(object: Runnable {
-                    override fun run() {
-                        if (cctvStatus) {
-                            takePhoto()
-                        }
-                        cameraHandler.postDelayed(this, 900)
-                    }
-                })
-            }
-
         }, ContextCompat.getMainExecutor(this))
     }
 
@@ -273,7 +269,7 @@ class MainActivity : AppCompatActivity() {
 
     private fun sendImageToCloud(fileName: String, imageData: String?, token: String) {
 //        val progressDialog = ProgressDialog.show(this@MainActivity, "", "Uploading...", true)
-        val queue = MySingleton.getInstance(this.applicationContext).requestQueue
+        MySingleton.getInstance(this.applicationContext).requestQueue
         val map = mutableMapOf<String, Any?>()
         map["filename"] = fileName
         map["token"] = token
@@ -281,7 +277,8 @@ class MainActivity : AppCompatActivity() {
 
         val json = JSONObject(map)
         Log.e("sendImageToCloud", json.toString() )
-        val jsonReq = object: JsonObjectRequest(Request.Method.POST,URL_IMAGE_POST,json,
+        val jsonReq = object: JsonObjectRequest(
+            Method.POST,URL_IMAGE_POST,json,
         Response.Listener { response ->
             Log.i(TAG, "Response from server: $response")
         }, Response.ErrorListener{
@@ -334,5 +331,9 @@ class MainActivity : AppCompatActivity() {
         private const val FILENAME_FORMAT = "yyyy-MM-dd-HH-mm-ss-SSS"
         private const val REQUEST_CODE_PERMISSIONS = 10
         private val REQUIRED_PERMISSIONS = arrayOf(Manifest.permission.CAMERA)
+        private const val IMAGE_CAPTURE_WIDTH = 300
+        private const val IMAGE_CAPTURE_HEIGHT = 300
+        private const val URL_IMAGE_POST = "http://128.199.123.139:8080/image/"
+        private const val URL_TOKEN_POST = "http://128.199.123.139:8080/tokenCheck/"
     }
 }

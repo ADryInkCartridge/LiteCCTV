@@ -24,7 +24,7 @@ class DBHelper(context: Context, factory: SQLiteDatabase.CursorFactory?) :
 
     override fun onUpgrade(db: SQLiteDatabase, p1: Int, p2: Int) {
         // this method is to check if table already exists
-        db.execSQL("DROP TABLE IF EXISTS " + TABLE_NAME)
+        db.execSQL("DROP TABLE IF EXISTS $TABLE_NAME")
         onCreate(db)
     }
 
@@ -41,16 +41,16 @@ class DBHelper(context: Context, factory: SQLiteDatabase.CursorFactory?) :
     // all data from our database
     fun getToken(): Cursor? {
         val db = this.readableDatabase
-        return db.rawQuery("SELECT token FROM " + TABLE_NAME, null)
+        return db.rawQuery("SELECT token FROM $TABLE_NAME", null)
     }
 
     companion object{
-        private val DATABASE_NAME = "Tokens"
+        private const val DATABASE_NAME = "Tokens"
 
         // below is the variable for database version
-        private val DATABASE_VERSION = 1
-        val TABLE_NAME = "tokenTable"
-        val ID_COL = "id"
-        val TOKEN_COL = "token"
+        private const val DATABASE_VERSION = 1
+        const val TABLE_NAME = "tokenTable"
+        const val ID_COL = "id"
+        const val TOKEN_COL = "token"
     }
 }
