@@ -110,7 +110,7 @@ class MainActivity : AppCompatActivity() {
     }
 
     private fun switchCamera() {
-        Toast.makeText(this, "Switch camera now", Toast.LENGTH_LONG).show()
+        Toast.makeText(this, "Camera Switch", Toast.LENGTH_LONG).show()
         if (lensFacing == CameraSelector.DEFAULT_BACK_CAMERA)
             lensFacing = CameraSelector.DEFAULT_FRONT_CAMERA
         else if (lensFacing == CameraSelector.DEFAULT_FRONT_CAMERA)
@@ -168,7 +168,7 @@ class MainActivity : AppCompatActivity() {
                 var bitmap: Bitmap = imageProxyToBitmap(imageProxy)
                 imageProxy.close()
                 if (motionDetector.hasMotion(bitmap)) {
-                    Toast.makeText(baseContext, "Capture OK - MOTION DETECTED - Sending Picture To Server Now", Toast.LENGTH_LONG).show()
+                    Toast.makeText(baseContext, "Capture OK - MOTION DETECTED - Sending Picture To Server Now", Toast.LENGTH_SHORT).show()
                     thread {
                         // Play sound
                         playSound()
