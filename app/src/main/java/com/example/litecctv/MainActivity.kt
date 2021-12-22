@@ -52,9 +52,10 @@ class MainActivity : AppCompatActivity() {
     private lateinit var outputDirectory: File
     private lateinit var cameraExecutor: ExecutorService
     var token = ""
-    private var motionDetector: MotionDetector? = null
+    private val motionDetector: MotionDetector = MotionDetector()
     private var cctvStatus = false
     private lateinit var cameraHandler: Handler
+    private var lensFacing: CameraSelector = CameraSelector.DEFAULT_BACK_CAMERA
 
     @SuppressLint("Range")
     override fun onCreate(savedInstanceState: Bundle?) {
@@ -85,6 +86,22 @@ class MainActivity : AppCompatActivity() {
         outputDirectory = getOutputDirectory()
 
         cameraExecutor = Executors.newSingleThreadExecutor()
+
+        // Camera switching button
+        switch_camera_button.setOnClickListener { switchCamera() }
+
+        // Start capture timer (capture every 900ms)
+        thread() {
+            cameraHandler = Handler(Looper.getMainLooper())
+            cameraHandler.post(object: Runnable {
+                override fun run() {
+                    if (cctvStatus) {
+                        takePhoto()
+                    }
+                    cameraHandler.postDelayed(this, 900)
+                }
+            })
+        }
     }
 
     fun playSound() {
@@ -95,6 +112,15 @@ class MainActivity : AppCompatActivity() {
         } catch (e: java.lang.Exception) {
             e.printStackTrace()
         }
+    }
+
+    fun switchCamera() {
+        Toast.makeText(this, "Switch camera now", Toast.LENGTH_LONG).show()
+        if (lensFacing == CameraSelector.DEFAULT_BACK_CAMERA)
+            lensFacing = CameraSelector.DEFAULT_FRONT_CAMERA
+        else if (lensFacing == CameraSelector.DEFAULT_FRONT_CAMERA)
+            lensFacing = CameraSelector.DEFAULT_BACK_CAMERA
+        startCamera()
     }
 
     fun switchOnOffCCTV() {
@@ -214,36 +240,17 @@ class MainActivity : AppCompatActivity() {
                 })
             }
 
-            // Select back camera as a default
-            val cameraSelector = CameraSelector.DEFAULT_BACK_CAMERA
-
             try {
                 // Unbind use cases before rebinding
                 cameraProvider.unbindAll()
 
                 // Bind use cases to camera
                 cameraProvider.bindToLifecycle(
-                    this, cameraSelector, preview, imageCapture)
+                    this, lensFacing, preview, imageCapture)
 
             } catch(exc: Exception) {
                 Log.e(TAG, "Use case binding failed", exc)
             }
-
-            // Instantiate motion detector
-            motionDetector = MotionDetector()
-
-            thread() {
-                cameraHandler = Handler(Looper.getMainLooper())
-                cameraHandler.post(object: Runnable {
-                    override fun run() {
-                        if (cctvStatus) {
-                            takePhoto()
-                        }
-                        cameraHandler.postDelayed(this, 900)
-                    }
-                })
-            }
-
         }, ContextCompat.getMainExecutor(this))
     }
 
