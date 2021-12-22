@@ -86,7 +86,7 @@ class MainActivity : AppCompatActivity() {
         switch_camera_button.setOnClickListener { switchCamera() }
 
         // Start capture timer (capture every 900ms)
-        thread() {
+        thread {
             cameraHandler = Handler(Looper.getMainLooper())
             cameraHandler.post(object: Runnable {
                 override fun run() {
@@ -169,7 +169,7 @@ class MainActivity : AppCompatActivity() {
                 imageProxy.close()
                 if (motionDetector.hasMotion(bitmap)) {
                     Toast.makeText(baseContext, "Capture OK - MOTION DETECTED - Sending Picture To Server Now", Toast.LENGTH_LONG).show()
-                    thread() {
+                    thread {
                         // Play sound
                         playSound()
 
@@ -187,7 +187,7 @@ class MainActivity : AppCompatActivity() {
     private fun generateToken() {
         val queue = Volley.newRequestQueue(this)
         val stringRequest = StringRequest(Request.Method.GET, URL_TOKEN_POST,
-            Response.Listener { response ->
+            { response ->
                 // Display the first 500 characters of the response string.
                 Log.e("AAA", "generateToken: $response")
                 db.addToken(response)
@@ -195,7 +195,7 @@ class MainActivity : AppCompatActivity() {
                 token = response
                 Toast.makeText(this, token, Toast.LENGTH_SHORT).show()
             },
-            Response.ErrorListener { Log.e("AAA", "generateToken:") })
+            { Log.e("AAA", "generateToken:") })
 
         queue.add(stringRequest)
     }
@@ -210,7 +210,7 @@ class MainActivity : AppCompatActivity() {
     private fun startCamera() {
         val cameraProviderFuture = ProcessCameraProvider.getInstance(this)
 
-        cameraProviderFuture.addListener(Runnable {
+        cameraProviderFuture.addListener({
             // Used to bind the lifecycle of cameras to the lifecycle owner
             val cameraProvider: ProcessCameraProvider = cameraProviderFuture.get()
 
@@ -277,7 +277,8 @@ class MainActivity : AppCompatActivity() {
 
         val json = JSONObject(map)
         Log.e("sendImageToCloud", json.toString() )
-        val jsonReq = object: JsonObjectRequest(Request.Method.POST,URL_IMAGE_POST,json,
+        val jsonReq = object: JsonObjectRequest(
+            Method.POST,URL_IMAGE_POST,json,
         Response.Listener { response ->
             Log.i(TAG, "Response from server: $response")
         }, Response.ErrorListener{
